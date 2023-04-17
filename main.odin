@@ -1,44 +1,29 @@
 package main
 
-import "core:testing"
 import "core:math"
 import "core:math/bits"
 import "core:fmt"
-import "core:time"
+
 
 main :: proc() {
-    // fmt.println("Hello World!")
+    run_benchmark()
+    // samples: [8]f32
+    // generate_samples(samples[:])
 
-    // b : uint =
-    // fmt.println(b >> 1)
-    // reversed := bits.reverse_bits(b)
-    // fmt.println(size_of(uint))
-    // fmt.println(4 >> 1)
+    // plan := create_fft_plan(8)
+    // defer destroy_fft_plan(plan)
 
-    // start := time.Stopwatch{}
-    // time.stopwatch_start(&start)
-    // time.stopwatch_stop(&start)
-    // duration := time.stopwatch_duration(start)
-    // ms := time.duration_milliseconds(duration)
-    // fmt.printf("{}ms\n", ms)
+    // run_fft_plan(plan, samples[:])
 
-    samples: [8]f32
-    generate_samples(samples[:])
-
-    plan := create_fft_plan(8)
-    defer destroy_fft_plan(plan)
-
-    run_fft_plan(plan, samples[:])
-
-    fmt.println(plan.buffer)
-    // fmt.println(scrambled)
-    fmt.println(expected)
+    // fmt.println(plan.buffer)
+    // // fmt.println(scrambled)
+    // fmt.println(expected)
 }
 
 
 // ¯\_(ツ)_/¯
 // https://stackoverflow.com/a/34236981/156372
-reverse_bits :: proc(value: uint, k: uint) -> (result: uint = 0) {
+reverse_bits :: #force_inline proc(value: uint, k: uint) -> (result: uint = 0) {
     for i in 0..<k {
         result |= ((value >> i) & 1) << (k - i - 1)
     }
@@ -60,7 +45,7 @@ create_fft_plan :: proc(fft_size: uint) -> (plan: FFT_Plan) {
     plan.buffer = make([]complex64, fft_size)
     plan.twiddle_lookup = make([]complex64, fft_size)
     plan.fft_size = fft_size
-    phase_delta := 2.0 * math.PI / f32(fft_size)
+    phase_delta := math.TAU / f32(fft_size) // τ = 2π
 
     for i in 0..<fft_size {
         phase := phase_delta * f32(i)
@@ -78,7 +63,7 @@ destroy_fft_plan :: proc(plan: FFT_Plan) {
     Radix R:
         Run decimation in stages, r inputs and r outputs, N/R butterflies per stage, log_r(N) stages.
 */
-run_fft_plan :: proc(plan: FFT_Plan, samples:[]f32) {
+run_fft_plan :: proc(plan: FFT_Plan, samples:[]f32) #no_bounds_check {
     // copy samples over to internal buffer with scrambled (bit reversed) indexes
     for sample, i in samples {
         j := reverse_bits(uint(i), bits.log2(plan.fft_size))
@@ -89,7 +74,7 @@ run_fft_plan :: proc(plan: FFT_Plan, samples:[]f32) {
     stride := uint(1)
     group_increment := RADIX
     twiddle_increment := plan.fft_size / RADIX
-    butterfly_count := uint(1)
+    butterfly_count := uint(1) // same as stride
 
     // log_r(N) stages
     for stride < plan.fft_size {
@@ -106,9 +91,9 @@ run_fft_plan :: proc(plan: FFT_Plan, samples:[]f32) {
             }
             group += group_increment
         }
-        butterfly_count *= RADIX
         twiddle_increment /= RADIX
         group_increment *= RADIX
+        butterfly_count *= RADIX
         stride *= RADIX
     }
 }
@@ -122,7 +107,7 @@ run_fft_plan :: proc(plan: FFT_Plan, samples:[]f32) {
                   / \ -
     y -- w^k/N --/   \----------> y'
 */
-butterfly :: proc(x: ^complex64, y: ^complex64, w: complex64) {
+butterfly :: #force_inline proc(x: ^complex64, y: ^complex64, w: complex64) {
     a := x^ + w * y^
     b := x^ - w * y^
     x^ = a
@@ -133,7 +118,7 @@ naive_dft :: proc(
     dft: []complex64,
     samples: []f32,
     dft_size: uint
-) {
+) #no_bounds_check {
     phase_angle:f32 = 2 * math.PI / f32(dft_size)
 
     for freq in 0..<dft_size {
@@ -154,7 +139,7 @@ naive_dft_real :: proc(
     dft: []complex64,
     samples: []f32,
     dft_size: uint
-) {
+) #no_bounds_check {
     phase_angle:f32 = 2 * math.PI / f32(dft_size)
     real_size := dft_size % 2 == 0 ? dft_size / 2 : (dft_size+1) / 2
 
@@ -175,72 +160,6 @@ naive_dft_real :: proc(
     }
 }
 
-
-// 1kHz + 2kHz + π/2 phase
-generate_samples :: proc(data: []f32) {
-    SAMPLERATE :: 8000.00
-    for _, i in data {
-        k := 2.0 * math.PI * f32(i) / SAMPLERATE
-        data[i] = math.sin(k * 1000) + math.sin(k * 2000 + 0.5 * math.PI)
-    }
-}
-
-approx_eq :: proc(x: f32, y: f32) -> bool {
-    tolerance :: 0.00001
-    return abs(x - y) <= tolerance
-}
-
-
-expected : []complex64 = {
-    complex(0, 0),
-    complex(0,-4),
-    complex(4, 0),
-    complex(0, 0),
-    complex(0, 0),
-    complex(0, 0),
-    complex(4, 0),
-    complex(0, 4),
-}
-
-@(test)
-test_naive_dft :: proc(^testing.T) {
-    dft: [8]complex64
-    samples: [8]f32
-    generate_samples(samples[:])
-    naive_dft(dft[:], samples[:], 8)
-    for _, i in dft {
-        assert(approx_eq(real(dft[i]), real(expected[i])))
-        assert(approx_eq(imag(dft[i]), imag(expected[i])))
-    }
-}
-
-@(test)
-test_naive_dft_real :: proc(^testing.T) {
-    dft: [8]complex64
-    samples: [8]f32
-    generate_samples(samples[:])
-    naive_dft_real(dft[:], samples[:], 8)
-    for _, i in dft {
-        assert(approx_eq(real(dft[i]), real(expected[i])))
-        assert(approx_eq(imag(dft[i]), imag(expected[i])))
-    }
-}
-
-@(test)
-test_fft :: proc(^testing.T) {
-    samples: [8]f32
-    generate_samples(samples[:])
-
-    plan := create_fft_plan(8)
-    defer destroy_fft_plan(plan)
-
-    run_fft_plan(plan, samples[:])
-
-    for _, i in plan.buffer {
-        assert(approx_eq(real(plan.buffer[i]), real(expected[i])))
-        assert(approx_eq(imag(plan.buffer[i]), imag(expected[i])))
-    }
-}
 
 
 /*
@@ -300,7 +219,7 @@ test_fft :: proc(^testing.T) {
 */
 
 
-// NOTE: This is just a learning artifact
+// NOTE: This is just a learning/debugging artifact
 _run_8_butterflies :: proc(plan: FFT_Plan, samples:[]f32) {
     RADIX :: uint(2)
     stride := uint(1)
