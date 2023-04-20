@@ -1,4 +1,4 @@
-package main
+package fft
 
 import "core:math"
 import "core:testing"
