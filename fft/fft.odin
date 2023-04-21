@@ -5,6 +5,12 @@ import "core:math/bits"
 import "core:fmt"
 
 
+/*
+    Learning & experimenting with FFT implementations based on the book
+    “Understanding Digital Signal Processing” by R.G.Lyons.
+*/
+
+
 // I have no idea how this works  ¯\_(ツ)_/¯
 // https://stackoverflow.com/a/34236981/156372
 reverse_bits :: #force_inline proc(value: uint, k: uint) -> (result: uint = 0) {
@@ -49,9 +55,12 @@ destroy_fft_plan :: proc(plan: FFT_Plan) {
 
 /*
     Radix R:
-        Run decimation in stages, r inputs and r outputs, N/R butterflies per stage, log_r(N) stages.
+        Run decimation in stages,
+        r inputs and r outputs,
+        N/R butterflies per stage, log_r(N) stages.
 */
 run_fft_plan :: proc(plan: FFT_Plan, samples:[]f32) #no_bounds_check {
+
     // copy samples over to internal buffer with scrambled (bit reversed) indexes
     for sample, i in samples {
         j := plan.scrambled_indexes[i]
@@ -67,8 +76,13 @@ run_fft_plan :: proc(plan: FFT_Plan, samples:[]f32) #no_bounds_check {
     // log_r(N) stages
     for stride < plan.fft_size {
         group := uint(0)
+
+        // decreasing number of groups
+        // first stage has one butterfly per group in N/2 groups, last stage has one group with N/2 butterflies
         for group < plan.fft_size {
             k := uint(0)
+
+            // all butterflies in group
             for b in 0..<butterfly_count {
                 radix2_butterfly(
                     &plan.buffer[group+b],
@@ -96,7 +110,6 @@ run_fft_plan :: proc(plan: FFT_Plan, samples:[]f32) #no_bounds_check {
                   / \ -
     y -- w^k/N --/   \----------> y'
 
-    Note: adapted from the book “Understanding Digital Signal Processing” by R.G.Lyons
 */
 radix2_butterfly :: #force_inline proc(x: ^complex64, y: ^complex64, w: complex64) {
     a := x^ + w * y^
@@ -104,3 +117,4 @@ radix2_butterfly :: #force_inline proc(x: ^complex64, y: ^complex64, w: complex6
     x^ = a
     y^ = b
 }
+// TODO: radix-4 radix-8 butterflies?
