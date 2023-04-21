@@ -12,6 +12,7 @@ import "external/meow_fft"
 import "external/pffft"
 import "external/pocketfft"
 import "external/fftw3"
+import "external/mufft"
 import "fft"
 
 
@@ -113,6 +114,17 @@ run_meow_fft :: proc() {
     }
 }
 
+run_mufft :: proc() {
+    using mufft
+
+    plan := mufft_create_plan_1d_r2c(SIZE, 0)
+    defer mufft_free_plan_1d(plan)
+    mufft_execute_plan_1d(plan, raw_data(dft[:]), raw_data(samples[:]))
+    for i in 0..<SIZE {
+        spectrum[i] = magnitude(real(dft[i]), imag(dft[i]))
+    }
+}
+
 run_fft :: proc() {
     plan := fft.create_fft_plan(SIZE)
     defer fft.destroy_fft_plan(plan)
@@ -129,7 +141,7 @@ main :: proc() {
     defer rl.CloseWindow()
 
     generate_samples(samples[:])
-    run_pocketfft()
+    run_mufft()
 
     j := 0
     for i in 0..<WIDTH {

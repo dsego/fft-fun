@@ -9,25 +9,23 @@ import "../external/meow_fft"
 import "../external/pffft"
 import "../external/pocketfft"
 import "../external/fftw3"
+import "../external/mufft"
 import "../fft"
 
+SIZE :: uint(4096)
 
 main :: proc() {
-    FFT_SIZE :: uint(4096)
-    dft: [FFT_SIZE]complex64
-    samples: [FFT_SIZE]f32
-
-    for i in 0..<FFT_SIZE {
-        samples[i] = f32(0)
-    }
-
     // Naive DFT
     {
+        dft: [SIZE]complex64
+        samples: [SIZE]f32
+        for i in 0..<SIZE { samples[i] = f32(0) }
+
         using fft
         stopwatch := time.Stopwatch{}
 
         time.stopwatch_start(&stopwatch)
-        naive_dft_real(dft[:], samples[:], FFT_SIZE)
+        naive_dft_real(dft[:], samples[:], SIZE)
         time.stopwatch_stop(&stopwatch)
 
         duration := time.stopwatch_duration(stopwatch)
@@ -37,15 +35,15 @@ main :: proc() {
 
     // Kiss FFT
     {
-        cx_in: [FFT_SIZE]kissfft.kiss_fft_cpx
-        cx_out: [FFT_SIZE]kissfft.kiss_fft_cpx
+        cx_in: [SIZE]kissfft.kiss_fft_cpx
+        cx_out: [SIZE]kissfft.kiss_fft_cpx
 
         // fill with zeroes
-        for i in 0..<FFT_SIZE {
+        for i in 0..<SIZE {
             cx_in[i] = {0, 0}
         }
 
-        cfg := kissfft.kiss_fft_alloc(int(FFT_SIZE), false, nil, nil)
+        cfg := kissfft.kiss_fft_alloc(int(SIZE), false, nil, nil)
         // defer kissfft.kiss_fft_free(cfg)
 
         stopwatch := time.Stopwatch{}
@@ -62,15 +60,15 @@ main :: proc() {
 
     // Kiss FFT real
     {
-        time_data: [FFT_SIZE]f32
-        freq_data: [FFT_SIZE]kissfft.kiss_fft_cpx
+        time_data: [SIZE]f32
+        freq_data: [SIZE]kissfft.kiss_fft_cpx
 
         // fill with zeroes
-        for i in 0..<FFT_SIZE {
+        for i in 0..<SIZE {
             time_data[i] = f32(0)
         }
 
-        cfg := kissfft.kiss_fftr_alloc(int(FFT_SIZE), false, nil, nil)
+        cfg := kissfft.kiss_fftr_alloc(int(SIZE), false, nil, nil)
         // defer kissfft.kiss_fft_free(cfg)
 
         stopwatch := time.Stopwatch{}
@@ -89,12 +87,15 @@ main :: proc() {
     {
         using meow_fft
 
+        freq_data: [SIZE]Meow_FFT_Complex
+        samples: [SIZE]f32
+        for i in 0..<SIZE { samples[i] = f32(0) }
+
         stopwatch := time.Stopwatch{}
-        freq_data: [FFT_SIZE]Meow_FFT_Complex
-        workset_bytes := meow_fft_generate_workset_real(int(FFT_SIZE), nil)
+        workset_bytes := meow_fft_generate_workset_real(int(SIZE), nil)
         workset := mem.alloc(int(workset_bytes))
         defer free(workset)
-        meow_fft_generate_workset_real(int(FFT_SIZE), workset)
+        meow_fft_generate_workset_real(int(SIZE), workset)
 
         time.stopwatch_start(&stopwatch)
         meow_fft_real(workset, raw_data(samples[:]), raw_data(freq_data[:]))
@@ -109,11 +110,13 @@ main :: proc() {
     {
         using pffft
 
+        out : [SIZE*2]f32
+        samples: [SIZE]f32
+        for i in 0..<SIZE { samples[i] = f32(0) }
+
         stopwatch := time.Stopwatch{}
 
-        out : [FFT_SIZE*2]f32
-
-        setup := pffft_new_setup(int(FFT_SIZE), pffft_transform_t.PFFFT_REAL)
+        setup := pffft_new_setup(int(SIZE), pffft_transform_t.PFFFT_REAL)
         defer pffft_destroy_setup(setup)
 
         time.stopwatch_start(&stopwatch)
@@ -131,12 +134,10 @@ main :: proc() {
 
         stopwatch := time.Stopwatch{}
 
-        out : [FFT_SIZE*2]f64
-        for i in 0..<FFT_SIZE {
-            out[i] = f64(0)
-        }
+        out : [SIZE*2]f64
+        for i in 0..<SIZE { out[i] = f64(0) }
 
-        plan := make_rfft_plan(FFT_SIZE)
+        plan := make_rfft_plan(SIZE)
         defer destroy_rfft_plan(plan)
 
         time.stopwatch_start(&stopwatch)
@@ -151,10 +152,10 @@ main :: proc() {
     // FFTW3
     {
         using fftw3
-        input : [FFT_SIZE]f64
-        out : [FFT_SIZE]fftw_complex
+        input : [SIZE]f64
+        out : [SIZE]fftw_complex
 
-        plan := fftw_plan_dft_r2c_1d(int(FFT_SIZE), raw_data(input[:]), raw_data(out[:]), 0)
+        plan := fftw_plan_dft_r2c_1d(int(SIZE), raw_data(input[:]), raw_data(out[:]), 0)
         defer fftw_destroy_plan(plan)
 
         stopwatch := time.Stopwatch{}
@@ -168,13 +169,39 @@ main :: proc() {
         fmt.printf("FFTW3: {} µs\n", µs)
     }
 
+    // MUFFT
+    {
+        using mufft
+
+        dft: [SIZE]complex64
+        samples: [SIZE]f32
+        for i in 0..<SIZE { samples[i] = f32(0) }
+
+        plan := mufft_create_plan_1d_r2c(SIZE, 0)
+        defer mufft_free_plan_1d(plan)
+
+        stopwatch := time.Stopwatch{}
+
+        time.stopwatch_start(&stopwatch)
+        mufft_execute_plan_1d(plan, raw_data(dft[:]), raw_data(samples[:]))
+        time.stopwatch_stop(&stopwatch)
+
+        duration := time.stopwatch_duration(stopwatch)
+        µs := time.duration_microseconds(duration)
+        fmt.printf("MUFFT: {} µs\n", µs)
+    }
+
 
     // My radix-2 FFT
     {
         using fft
 
+        dft: [SIZE]complex64
+        samples: [SIZE]f32
+        for i in 0..<SIZE { samples[i] = f32(0) }
+
         stopwatch := time.Stopwatch{}
-        plan := create_fft_plan(FFT_SIZE)
+        plan := create_fft_plan(SIZE)
         defer destroy_fft_plan(plan)
 
         time.stopwatch_start(&stopwatch)

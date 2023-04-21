@@ -70,7 +70,7 @@ run_fft_plan :: proc(plan: FFT_Plan, samples:[]f32) #no_bounds_check {
         for group < plan.fft_size {
             k := uint(0)
             for b in 0..<butterfly_count {
-                butterfly(
+                radix2_butterfly(
                     &plan.buffer[group+b],
                     &plan.buffer[group+b+stride],
                     plan.twiddle_lookup[k],
@@ -98,7 +98,7 @@ run_fft_plan :: proc(plan: FFT_Plan, samples:[]f32) #no_bounds_check {
 
     Note: adapted from the book “Understanding Digital Signal Processing” by R.G.Lyons
 */
-butterfly :: #force_inline proc(x: ^complex64, y: ^complex64, w: complex64) {
+radix2_butterfly :: #force_inline proc(x: ^complex64, y: ^complex64, w: complex64) {
     a := x^ + w * y^
     b := x^ - w * y^
     x^ = a

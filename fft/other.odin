@@ -95,25 +95,25 @@ _run_8_butterflies :: proc(plan: FFT_Plan, samples:[]f32) {
 
 
     // stage 0, stride 1
-    butterfly(&plan.buffer[0], &plan.buffer[1], plan.twiddle_lookup[0])
+    radix2_butterfly(&plan.buffer[0], &plan.buffer[1], plan.twiddle_lookup[0])
     // --
-    butterfly(&plan.buffer[2], &plan.buffer[3], plan.twiddle_lookup[0])
+    radix2_butterfly(&plan.buffer[2], &plan.buffer[3], plan.twiddle_lookup[0])
     // --
-    butterfly(&plan.buffer[4], &plan.buffer[5], plan.twiddle_lookup[0])
+    radix2_butterfly(&plan.buffer[4], &plan.buffer[5], plan.twiddle_lookup[0])
     // --
-    butterfly(&plan.buffer[6], &plan.buffer[7], plan.twiddle_lookup[0])
+    radix2_butterfly(&plan.buffer[6], &plan.buffer[7], plan.twiddle_lookup[0])
 
 
     // stage 1, stride 2
-    butterfly(&plan.buffer[0], &plan.buffer[2], plan.twiddle_lookup[0])
-    butterfly(&plan.buffer[1], &plan.buffer[3], plan.twiddle_lookup[2])
+    radix2_butterfly(&plan.buffer[0], &plan.buffer[2], plan.twiddle_lookup[0])
+    radix2_butterfly(&plan.buffer[1], &plan.buffer[3], plan.twiddle_lookup[2])
     // --
-    butterfly(&plan.buffer[4], &plan.buffer[6], plan.twiddle_lookup[0])
-    butterfly(&plan.buffer[5], &plan.buffer[7], plan.twiddle_lookup[2])
+    radix2_butterfly(&plan.buffer[4], &plan.buffer[6], plan.twiddle_lookup[0])
+    radix2_butterfly(&plan.buffer[5], &plan.buffer[7], plan.twiddle_lookup[2])
 
     // stage 2, stride 4
-    butterfly(&plan.buffer[0], &plan.buffer[4], plan.twiddle_lookup[0])
-    butterfly(&plan.buffer[1], &plan.buffer[5], plan.twiddle_lookup[1])
-    butterfly(&plan.buffer[2], &plan.buffer[6], plan.twiddle_lookup[2])
-    butterfly(&plan.buffer[3], &plan.buffer[7], plan.twiddle_lookup[3])
+    radix2_butterfly(&plan.buffer[0], &plan.buffer[4], plan.twiddle_lookup[0])
+    radix2_butterfly(&plan.buffer[1], &plan.buffer[5], plan.twiddle_lookup[1])
+    radix2_butterfly(&plan.buffer[2], &plan.buffer[6], plan.twiddle_lookup[2])
+    radix2_butterfly(&plan.buffer[3], &plan.buffer[7], plan.twiddle_lookup[3])
 }
