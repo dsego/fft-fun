@@ -23,7 +23,7 @@ Real-to-complex 4096-point FFT, averaged over 1,000 iterations on Apple M1 8 Cor
 
 | Library        | µs        |
 | ---------------|---------- |
-| Brute force    | 49289.279 |
+| [brute force]  | 49289.279 |
 | KissFFT        | 69.463    |
 | Meow FFT       | 10.521    |
 | Pffft          | 2.529     |
