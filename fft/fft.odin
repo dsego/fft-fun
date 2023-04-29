@@ -117,4 +117,4 @@ radix2_butterfly :: #force_inline proc(x: ^complex64, y: ^complex64, w: complex6
     x^ = a
     y^ = b
 }
-// TODO: radix-4 radix-8 butterflies?
+// TODO: higher radixes, real-time input optimization

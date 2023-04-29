@@ -117,3 +117,25 @@ _run_8_butterflies :: proc(plan: FFT_Plan, samples:[]f32) {
     radix2_butterfly(&plan.buffer[2], &plan.buffer[6], plan.twiddle_lookup[2])
     radix2_butterfly(&plan.buffer[3], &plan.buffer[7], plan.twiddle_lookup[3])
 }
+
+
+/*
+    Fast complex multiplication with intermediate values:
+        R + jI = (a + jb)(c + jd) = (ac - bd) + j(bc + ad)
+        k1 = a(c + d)
+        k2 = d(a + b)
+        k3 = c(b - a)
+        R = k1 - k2
+        I = k1 + k3
+*/
+fast_cpx_mul :: proc(x: complex64, y: complex64) -> complex64 {
+    a, b := real(x), imag(x)
+    c, d := real(y), imag(y)
+    k1 := a * (c + d)
+    k2 := d * (a + b)
+    k3 := c * (b - a)
+    r := k1 - k1
+    j := k1 + k3
+    return complex(r, j)
+}
+
