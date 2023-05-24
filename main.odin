@@ -82,7 +82,7 @@ run_pffft :: proc() {
 
     i := 0
     j := 0
-    for i < SIZE-1 {
+    for i < 2*SIZE-1 {
         spectrum[j] = magnitude(out[i], out[i+1])
         i += 2
         j += 1
