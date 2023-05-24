@@ -81,9 +81,11 @@ run_pffft :: proc() {
     pffft_transform_ordered(setup, raw_data(samples[:]), raw_data(out[:]), nil, pffft_direction_t.PFFFT_FORWARD)
 
     i := 0
+    j := 0
     for i < SIZE-1 {
-        spectrum[i] = magnitude(out[i], out[i+1])
+        spectrum[j] = magnitude(out[i], out[i+1])
         i += 2
+        j += 1
     }
 }
 
@@ -141,7 +143,8 @@ main :: proc() {
     defer rl.CloseWindow()
 
     generate_samples(samples[:])
-    run_mufft()
+    // run_mufft()
+    run_pffft()
 
     j := 0
     for i in 0..<WIDTH {
