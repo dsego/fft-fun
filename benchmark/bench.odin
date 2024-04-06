@@ -88,7 +88,7 @@ main :: proc() {
 
         stopwatch := time.Stopwatch{}
         workset_bytes := meow_fft_generate_workset_real(int(SIZE), nil)
-        workset := mem.alloc(int(workset_bytes))
+        workset, err := mem.alloc(int(workset_bytes))
         defer free(workset)
         meow_fft_generate_workset_real(int(SIZE), workset)
 
