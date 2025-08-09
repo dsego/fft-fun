@@ -17,7 +17,7 @@ ITERATIONS :: 1000
 
 main :: proc() {
     // Naive DFT
-    if false {
+    if true {
         dft: [SIZE]complex64
         samples: [SIZE]f32
         for i in 0..<SIZE do samples[i] = f32(1)
@@ -31,7 +31,7 @@ main :: proc() {
         duration := time.stopwatch_duration(stopwatch)
 
         µs := time.duration_microseconds(duration)
-        fmt.printf("Naive DFT real: {} µs\n", µs / f64(ITERATIONS))
+        fmt.printf("Naive DFT real: % 10.3f µs\n", µs / f64(ITERATIONS))
     }
 
     // Kiss FFT
@@ -53,7 +53,7 @@ main :: proc() {
 
         duration := time.stopwatch_duration(stopwatch)
         µs := time.duration_microseconds(duration)
-        fmt.printf("KissFFT: {} µs\n", µs / f64(ITERATIONS))
+        fmt.printf("KissFFT:        % 10.3f µs\n", µs / f64(ITERATIONS))
     }
 
     // Kiss FFT real
@@ -75,7 +75,7 @@ main :: proc() {
 
         duration := time.stopwatch_duration(stopwatch)
         µs := time.duration_microseconds(duration)
-        fmt.printf("KissFFT real: {} µs\n", µs / f64(ITERATIONS))
+        fmt.printf("KissFFT real:   % 10.3f µs\n", µs / f64(ITERATIONS))
     }
 
     // Meow FFT
@@ -98,7 +98,7 @@ main :: proc() {
 
         duration := time.stopwatch_duration(stopwatch)
         µs := time.duration_microseconds(duration)
-        fmt.printf("Meow FFT: {} µs\n", µs / f64(ITERATIONS))
+        fmt.printf("Meow FFT:       % 10.3f µs\n", µs / f64(ITERATIONS))
     }
 
     // Pffft
@@ -122,7 +122,7 @@ main :: proc() {
 
         duration := time.stopwatch_duration(stopwatch)
         µs := time.duration_microseconds(duration)
-        fmt.printf("Pffft: {} µs\n", µs / f64(ITERATIONS))
+        fmt.printf("Pffft:          % 10.3f µs\n", µs / f64(ITERATIONS))
     }
 
     // Pocket FFT
@@ -143,7 +143,7 @@ main :: proc() {
 
         duration := time.stopwatch_duration(stopwatch)
         µs := time.duration_microseconds(duration)
-        fmt.printf("Pocket FFT: {} µs\n", µs / f64(ITERATIONS))
+        fmt.printf("Pocket FFT:     % 10.3f µs\n", µs / f64(ITERATIONS))
     }
 
     // FFTW3
@@ -165,7 +165,7 @@ main :: proc() {
 
         duration := time.stopwatch_duration(stopwatch)
         µs := time.duration_microseconds(duration)
-        fmt.printf("FFTW3: {} µs\n", µs / f64(ITERATIONS))
+        fmt.printf("FFTW3:          % 10.3f µs\n", µs / f64(ITERATIONS))
     }
 
     // MUFFT
@@ -187,7 +187,7 @@ main :: proc() {
 
         duration := time.stopwatch_duration(stopwatch)
         µs := time.duration_microseconds(duration)
-        fmt.printf("MUFFT: {} µs\n", µs / f64(ITERATIONS))
+        fmt.printf("MUFFT:          % 10.3f µs\n", µs / f64(ITERATIONS))
     }
 
 
@@ -209,6 +209,6 @@ main :: proc() {
 
         duration := time.stopwatch_duration(stopwatch)
         µs := time.duration_microseconds(duration)
-        fmt.printf("My radix-2 FFT: {} µs\n", µs / f64(ITERATIONS))
+        fmt.printf("My radix-2 FFT: % 10.3f µs\n", µs / f64(ITERATIONS))
     }
 }
