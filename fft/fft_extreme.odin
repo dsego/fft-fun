@@ -136,6 +136,25 @@ extreme_run :: proc(plan: ^Extreme_FFT_Plan, samples: []f32, spectrum: []complex
     }
 }
 
+// AI: N real samples to N/2 bins in two arrays, like vDSP's: re[k] and im[k], DC in re[0] and
+// Nyquist in im[0]. Saves the split pairing re with im.
+extreme_run_arrays :: proc(plan: ^Extreme_FFT_Plan, samples: []f32, re, im: []f32) #no_bounds_check {
+    assert(len(samples) == plan.size && len(re) == plan.half && len(im) == plan.half)
+
+    extreme_first_stage(plan.stages[0], raw_data(samples), plan.buffers[0])
+    current := 0
+    for stage in plan.stages[1:] {
+        extreme_radix4_stage(stage, plan.buffers[current], plan.buffers[1 - current])
+        current = 1 - current
+    }
+
+    if plan.last_radix == 2 {
+        extreme_radix2_split_arrays(plan, plan.buffers[current], raw_data(re), raw_data(im))
+    } else {
+        extreme_radix4_split_arrays(plan, plan.buffers[current], raw_data(re), raw_data(im))
+    }
+}
+
 
 // AI: the first stage, stride 1, four values of p at once. The input is the samples, each pair
 // a complex point, and the four outputs of each butterfly land next to each other, so the four
@@ -249,8 +268,29 @@ extreme_radix4_block :: #force_inline proc "contextless" (
     stage's butterfly at q, s its stride.
 */
 
-// AI: the split with a radix-2 last stage, s = N/4: Z[q] = x[q] + x[q+s], Z[q+s] = x[q] - x[q+s]
-extreme_radix2_split :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, out: [^]f32) #no_bounds_check {
+// AI: the split with a radix-2 last stage, into interleaved bins and into two arrays. Public for
+// benchmark_stages.
+extreme_radix2_split :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, out: [^]f32) {
+    extreme_radix2_split_into(plan, x, out, nil, false)
+}
+
+extreme_radix2_split_arrays :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, re, im: [^]f32) {
+    extreme_radix2_split_into(plan, x, re, im, true)
+}
+
+// AI: the split with a radix-4 last stage, into interleaved bins and into two arrays
+extreme_radix4_split :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, out: [^]f32) {
+    extreme_radix4_split_into(plan, x, out, nil, false)
+}
+
+extreme_radix4_split_arrays :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, re, im: [^]f32) {
+    extreme_radix4_split_into(plan, x, re, im, true)
+}
+
+// AI: the split with a radix-2 last stage, s = N/4: Z[q] = x[q] + x[q+s], Z[q+s] = x[q] - x[q+s].
+// With ARRAYS the bins go to out (real parts) and out_im, without into out interleaved.
+@(private = "file")
+extreme_radix2_split_into :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, out, out_im: [^]f32, $ARRAYS: bool) #no_bounds_check {
     s := plan.last_stride
     half := plan.half
     x_re, x_im := raw_data(x[0]), raw_data(x[1])
@@ -258,7 +298,7 @@ extreme_radix2_split :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, out: [^]f32) 
     // plan, and it reloaded these from the plan on every iteration
     twiddle_re, twiddle_im := raw_data(plan.split_re), raw_data(plan.split_im)
 
-    for k in ([]int{0, 1, 2, 3, s}) do extreme_split_one(plan, x, out, k)
+    for k in ([]int{0, 1, 2, 3, s}) do extreme_split_one(plan, x, out, out_im, ARRAYS, k)
 
     // Bins k to k+3 and N/2 - k down to N/2 - k - 3, which are Z[s + (s-k-l)] for lane l
     for k := 4; k < s; k += 4 {
@@ -267,25 +307,26 @@ extreme_radix2_split :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, out: [^]f32) 
         low_im := extreme_load(x_im[k:]) + extreme_load(x_im[k + s:])
         high_re := extreme_reverse(extreme_load(x_re[mirror:]) - extreme_load(x_re[mirror + s:]))
         high_im := extreme_reverse(extreme_load(x_im[mirror:]) - extreme_load(x_im[mirror + s:]))
-        extreme_split_four(out, twiddle_re, twiddle_im, half, k, low_re, low_im, high_re, high_im)
+        extreme_split_four(out, out_im, twiddle_re, twiddle_im, half, k, low_re, low_im, high_re, high_im, ARRAYS)
     }
 }
 
 // AI: the split with a radix-4 last stage, s = N/8. Z[q + j·s] is output j of the butterfly at q.
 // The butterfly at q and the one at its mirror r = s - q - 3 together hold both bins of four
 // pairs: k = q + j·s pairs with N/2 - k = (s - q) + (3 - j)·s, in the mirror's lanes backwards.
-extreme_radix4_split :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, out: [^]f32) #no_bounds_check {
+@(private = "file")
+extreme_radix4_split_into :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, out, out_im: [^]f32, $ARRAYS: bool) #no_bounds_check {
     s := plan.last_stride
     half := plan.half
     x_re, x_im := raw_data(x[0]), raw_data(x[1])
-    // In locals, see extreme_radix2_split
+    // In locals, see extreme_radix2_split_into
     twiddle_re, twiddle_im := raw_data(plan.split_re), raw_data(plan.split_im)
 
     for q in ([]int{0, 1, 2, 3, s / 2, s - 3, s - 2, s - 1}) {
-        extreme_split_one(plan, x, out, q)
-        extreme_split_one(plan, x, out, q + s)
+        extreme_split_one(plan, x, out, out_im, ARRAYS, q)
+        extreme_split_one(plan, x, out, out_im, ARRAYS, q + s)
     }
-    extreme_split_one(plan, x, out, 2 * s)
+    extreme_split_one(plan, x, out, out_im, ARRAYS, 2 * s)
 
     for q := 4; q <= s / 2 - 4; q += 4 {
         r := s - q - 3
@@ -302,20 +343,21 @@ extreme_radix4_split :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, out: [^]f32) 
             extreme_load(x_re[r + 3 * s:]), extreme_load(x_im[r + 3 * s:]),
         )
 
-        extreme_split_four(out, twiddle_re, twiddle_im, half, q, q0_re, q0_im, extreme_reverse(r3_re), extreme_reverse(r3_im))
-        extreme_split_four(out, twiddle_re, twiddle_im, half, q + s, q1_re, q1_im, extreme_reverse(r2_re), extreme_reverse(r2_im))
-        extreme_split_four(out, twiddle_re, twiddle_im, half, r, r0_re, r0_im, extreme_reverse(q3_re), extreme_reverse(q3_im))
-        extreme_split_four(out, twiddle_re, twiddle_im, half, r + s, r1_re, r1_im, extreme_reverse(q2_re), extreme_reverse(q2_im))
+        extreme_split_four(out, out_im, twiddle_re, twiddle_im, half, q, q0_re, q0_im, extreme_reverse(r3_re), extreme_reverse(r3_im), ARRAYS)
+        extreme_split_four(out, out_im, twiddle_re, twiddle_im, half, q + s, q1_re, q1_im, extreme_reverse(r2_re), extreme_reverse(r2_im), ARRAYS)
+        extreme_split_four(out, out_im, twiddle_re, twiddle_im, half, r, r0_re, r0_im, extreme_reverse(q3_re), extreme_reverse(q3_im), ARRAYS)
+        extreme_split_four(out, out_im, twiddle_re, twiddle_im, half, r + s, r1_re, r1_im, extreme_reverse(q2_re), extreme_reverse(q2_im), ARRAYS)
     }
 }
 
 // AI: bins k to k+3 out of low, Z at k to k+3, and bins N/2 - k down to N/2 - k - 3 out of high,
-// Z at N/2 - k down to N/2 - k - 3
+// Z at N/2 - k down to N/2 - k - 3. With ARRAYS into out and out_im, without into out interleaved.
 @(private = "file")
 extreme_split_four :: #force_inline proc "contextless" (
-    out, twiddle_re, twiddle_im: [^]f32,
+    out, out_im, twiddle_re, twiddle_im: [^]f32,
     half, k: int,
     low_re, low_im, high_re, high_im: Extreme_F32x4,
+    $ARRAYS: bool,
 ) {
     HALF :: Extreme_F32x4{0.5, 0.5, 0.5, 0.5}
     w_re, w_im := extreme_load(twiddle_re[k:]), extreme_load(twiddle_im[k:])
@@ -332,26 +374,42 @@ extreme_split_four :: #force_inline proc "contextless" (
     // X[k] = E + T, ascending from k
     x_re := even_re + odd_im
     x_im := simd.fma(HALF, diff_im, minus_odd_re)
-    extreme_store(out[2 * k:], simd.shuffle(x_re, x_im, 0, 4, 1, 5))
-    extreme_store(out[2 * k + 4:], simd.shuffle(x_re, x_im, 2, 6, 3, 7))
 
-    // X[N/2 - k] = conj(E - T), descending from N/2 - k in the lanes. Stored ascending from
-    // N/2 - k - 3, lane 3 first: the turning around in the same shuffle that pairs re with im.
+    // X[N/2 - k] = conj(E - T), descending from N/2 - k in the lanes
     m_re := even_re - odd_im
     m_im := simd.fma(-HALF, diff_im, minus_odd_re)
     mirror := half - k - 3
-    extreme_store(out[2 * mirror:], simd.shuffle(m_re, m_im, 3, 7, 2, 6))
-    extreme_store(out[2 * mirror + 4:], simd.shuffle(m_re, m_im, 1, 5, 0, 4))
+
+    when ARRAYS {
+        extreme_store(out[k:], x_re)
+        extreme_store(out_im[k:], x_im)
+        extreme_store(out[mirror:], extreme_reverse(m_re))
+        extreme_store(out_im[mirror:], extreme_reverse(m_im))
+    } else {
+        extreme_store(out[2 * k:], simd.shuffle(x_re, x_im, 0, 4, 1, 5))
+        extreme_store(out[2 * k + 4:], simd.shuffle(x_re, x_im, 2, 6, 3, 7))
+        // Stored ascending from N/2 - k - 3, lane 3 first: the turning around in the same
+        // shuffle that pairs re with im
+        extreme_store(out[2 * mirror:], simd.shuffle(m_re, m_im, 3, 7, 2, 6))
+        extreme_store(out[2 * mirror + 4:], simd.shuffle(m_re, m_im, 1, 5, 0, 4))
+    }
 }
 
 // AI: bin k and bin N/2 - k one at a time, for the bins the vector loops don't reach. Bin 0 is
-// (DC, Nyquist), both real.
+// (DC, Nyquist), both real. With arrays into out and out_im, without into out interleaved.
 @(private = "file")
-extreme_split_one :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, out: [^]f32, k: int) #no_bounds_check {
+extreme_split_one :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, out, out_im: [^]f32, arrays: bool, k: int) #no_bounds_check {
+    // Bin b's real and imaginary parts
+    bin_at := proc(out, out_im: [^]f32, arrays: bool, b: int) -> (^f32, ^f32) {
+        if arrays do return &out[b], &out_im[b]
+        return &out[2 * b], &out[2 * b + 1]
+    }
+
     if k == 0 {
         z := extreme_z_at(plan, x, 0)
-        out[0] = real(z) + imag(z)
-        out[1] = real(z) - imag(z)
+        dc, nyquist := bin_at(out, out_im, arrays, 0)
+        dc^ = real(z) + imag(z)
+        nyquist^ = real(z) - imag(z)
         return
     }
 
@@ -362,11 +420,12 @@ extreme_split_one :: proc(plan: ^Extreme_FFT_Plan, x: [2][]f32, out: [^]f32, k: 
     even := complex(0.5 * (real(low) + real(high)), 0.5 * (imag(low) - imag(high)))
     odd := twiddle * complex(real(low) - real(high), imag(low) + imag(high))
 
-    mirror := plan.half - k
-    out[2 * k] = real(even) + imag(odd)
-    out[2 * k + 1] = imag(even) - real(odd)
-    out[2 * mirror] = real(even) - imag(odd)
-    out[2 * mirror + 1] = -imag(even) - real(odd)
+    low_re, low_im := bin_at(out, out_im, arrays, k)
+    low_re^ = real(even) + imag(odd)
+    low_im^ = imag(even) - real(odd)
+    high_re, high_im := bin_at(out, out_im, arrays, plan.half - k)
+    high_re^ = real(even) - imag(odd)
+    high_im^ = -imag(even) - real(odd)
 }
 
 // AI: one point of Z, output j of the last stage's butterfly at q, for bin = q + j·s

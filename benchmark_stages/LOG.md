@@ -144,3 +144,91 @@ The extreme FFT's output is in bin order like pffft ordered's. pffft's unordered
 | whole | 3.138 | 2.427 |
 
 Left: the first pass, 52 instructions an iteration like a middle pass's 48, takes twice as long. Its `ld2` and `st4`, or the zips and plain stores before them, cost about the same.
+
+
+#### First pass
+
+The first pass with one ingredient taken out at a time, wrong output, timing only:
+
+| first pass, N = 4096 | µs |
+|---|---|
+| as it is | 0.609 |
+| plain stores instead of the transposing `st4` | 0.408 |
+| plain loads instead of `ld2` | 0.523 |
+| plain loads and stores | 0.317 |
+| no twiddle loads | 0.487 |
+| no twiddle multiplies | 0.448 |
+| a middle pass, stride 16, for comparison | 0.322 |
+| the six twiddle vectors of each block of four p next to each other | 0.602–0.619 |
+| the samples 0, 8, 16 or 32 bytes past a 64 byte boundary | 0.602–0.608 |
+
+Without its reshuffling the first pass costs what a middle pass does. The vector units (4 operations a cycle on an M1) are the limit in every pass: a middle pass is 28 vector float operations an iteration, 7 cycles, measured 7.6. The first pass adds `ld2` and `st4`, which take several vector operations each, measured 15. Loads, stores and address arithmetic run elsewhere and cost next to nothing, which is also why radix-8 and the twiddle layouts didn't help.
+
+One reshuffle is needed somewhere: the samples come as even and odd pairs, and the stride 1 pass's outputs go to the next pass transposed. pffft has it in its last pass, the four interleaved sub-transforms combined, and its ordered transform adds a reorder on top. Merging the first two passes into a radix-16 one keeps the same transposes and saves only loads and stores. What would cut vector work is fewer float operations, split-radix's are about 6% fewer than radix-4's.
+
+
+#### Apple's vDSP
+
+Accelerate's `vDSP_fft_zrip` and `vDSP_DFT_zrop` in `benchmark_ai`, the even and odd split of the samples (`vDSP_ctoz`) timed with them. Both return twice the DFT in two arrays, so they skip the interleave and the halving our split does.
+
+| N | extreme FFT | pffft ordered | vDSP FFT | vDSP DFT |
+|---|---|---|---|---|
+| 1024 | 0.538 | 0.549 | 0.498 | 0.489 |
+| 4096 | 2.401 | 2.487 | 2.291 | 2.311 |
+| 8192 | 5.465 | 5.716 | 4.980 | 5.109 |
+
+
+#### What limits a middle pass
+
+Each tried on its own, N = 4096:
+
+| | µs |
+|---|---|
+| radix-4 pass, stride 64, as it is | 0.297 |
+| the same pass's 8 loads and 8 stores, no arithmetic | 0.246 |
+| its 8 loads only | 0.140 |
+| its 8 stores only | 0.223 |
+| decimation in time with the twiddles in tangent form, 22 vector operations instead of 28 (correct to 8e-8) | 0.280 |
+| re and im side by side in one array, `[re×4][im×4]`, paired loads and stores | 0.307 |
+| the inner loop unrolled by two | 0.352 |
+| a radix-8 pass's loads and stores, arrays apart, 16 + 16 streams | 0.260 |
+| the same, side by side, 8 + 8 streams | 0.200 |
+
+Memory traffic (about 0.21–0.25 µs) and arithmetic (about 0.28 µs) are close to each other, so taking away either one alone gains little: tangent twiddles cut the arithmetic 21% and the pass 3–6%, the side by side layout cut the stores' cost but not the pass's. The number of memory streams doesn't matter, a radix-8 pass's loads and stores cost what a radix-4 pass's do for half again the work.
+
+Other measurements:
+
+| | |
+|---|---|
+| a radix-4 pass in 8 lanes of `f16` instead of 4 of `f32` | 0.155 µs against 0.292, about 1e-3 precision instead of 1e-7 |
+| the radix-2 split storing the bins as two arrays like vDSP | 0.549 µs against 0.610 |
+| the split's scalar edge bins on their own | 0.036 µs at 4096, 0.104 at 8192, no faster inlined |
+| two cores handing a flag back and forth | 121 ns a round trip |
+
+
+#### Ludicrous FFT
+
+A separate file, removed after these measurements: decimation in time, so the twiddles multiply the inputs and take the tangent form, radix-8 passes made of two tangent radix-4 butterflies, the first pass with no twiddles and no transpose, the last radix-4 pass reading four ways interleaved (`ld4`) inside the split. N = 4096 in 4 passes instead of 6. Correct to the same 7e-8.
+
+| pass, N = 4096 | µs |
+|---|---|
+| first, radix-8, stride 256, no twiddles | 0.455 |
+| radix-8, stride 32 | 0.460 |
+| radix-8, stride 4, constants four p at a time | 0.422 |
+| radix-4, stride 1, inside the split | 1.096 |
+| whole | 2.392, the extreme FFT 2.442 |
+
+A radix-8 pass costs about 1.5 radix-4 passes, the same per level. The inner loop shows why: 34 `mov` next to 34 `fmla` and 34 `fmls`. NEON's multiply-add overwrites its accumulator, and the tangent form adds a value into two outputs nearly everywhere (a ± ..., b' ± ...), so each one is copied first. That makes a tangent radix-4 butterfly about 33 instructions against the plain one's 28. Radix-8 with plain twiddles is 84 vector operations for 32 points over 3 levels, the same 28 per level as radix-4.
+
+
+#### Two arrays
+
+`extreme_run_arrays`: the bins into a real and an imaginary array like vDSP's, DC in `re[0]` and Nyquist in `im[0]`, no pairing of re with im in the split. Three runs each:
+
+| N | extreme | extreme, two arrays | ludicrous (removed) | pffft ordered | vDSP FFT |
+|---|---|---|---|---|---|
+| 1024 | 0.549–0.563 | 0.541–0.554 | 0.695–0.708 | 0.553–0.573 | 0.508–0.513 |
+| 4096 | 2.448–2.501 | 2.422–2.434 | 2.414–2.442 | 2.547–2.580 | 2.341–2.381 |
+| 8192 | 5.516–5.694 | 5.456–5.649 | 5.533–5.640 | 5.892–5.919 | 5.153–5.229 |
+
+1–3% off the extreme FFT. vDSP stays 3–6% ahead.
