@@ -134,7 +134,7 @@ fast_cpx_mul :: proc(x: complex64, y: complex64) -> complex64 {
     k1 := a * (c + d)
     k2 := d * (a + b)
     k3 := c * (b - a)
-    r := k1 - k1
+    r := k1 - k2
     j := k1 + k3
     return complex(r, j)
 }
