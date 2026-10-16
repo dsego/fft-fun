@@ -49,15 +49,24 @@ main :: proc() {
         defer delete(spectrum)
         fft.ai_run_real_fft(&plan, samples, spectrum)
 
+        // Extreme FFT, radix-8
+        extreme := fft.extreme_create_plan(size)
+        defer fft.extreme_destroy_plan(&extreme)
+        extreme_spectrum := make([]complex64, size / 2)
+        defer delete(extreme_spectrum)
+        fft.extreme_run(&extreme, samples, extreme_spectrum)
+
         // Radix-2 plan, N complex bins out of the real samples
         radix2 := fft.create_fft_plan(uint(size))
         defer fft.destroy_fft_plan(radix2)
         fft.run_fft_plan(radix2, samples)
 
         ai := ([^]f32)(raw_data(spectrum))[:size]
-        peak, ai_error, radix2_error: f32
+        extreme_floats := ([^]f32)(raw_data(extreme_spectrum))[:size]
+        peak, ai_error, extreme_error, radix2_error: f32
         for value in reference do peak = max(peak, abs(value))
         for value, i in reference do ai_error = max(ai_error, abs(ai[i] - value))
+        for value, i in reference do extreme_error = max(extreme_error, abs(extreme_floats[i] - value))
         radix2_error = abs(real(radix2.buffer[0]) - reference[0])
         radix2_error = max(radix2_error, abs(real(radix2.buffer[size / 2]) - reference[1]))
         for k in 1 ..< size / 2 {
@@ -66,7 +75,7 @@ main :: proc() {
         }
 
         fmt.printf("N = %v, largest bin %.1f\n", size, peak)
-        fmt.printf("  error vs pffft:  AI %.2e, radix-2 %.2e\n", ai_error / peak, radix2_error / peak)
+        fmt.printf("  error vs pffft:  AI %.2e, extreme %.2e, radix-2 %.2e\n", ai_error / peak, extreme_error / peak, radix2_error / peak)
 
         fmt.printf("  radix-2:         % 8.3f µs\n", best_of(proc(data: rawptr) {
             p := cast(^Args)data
@@ -76,6 +85,10 @@ main :: proc() {
             p := cast(^Args)data
             fft.ai_run_real_fft(p.plan, p.samples, p.spectrum)
         }, &Args{samples = samples, plan = &plan, spectrum = spectrum}))
+        fmt.printf("  extreme FFT:     % 8.3f µs\n", best_of(proc(data: rawptr) {
+            p := cast(^Args)data
+            fft.extreme_run(p.extreme, p.samples, p.spectrum)
+        }, &Args{samples = samples, extreme = &extreme, spectrum = extreme_spectrum}))
         fmt.printf("  pffft ordered:   % 8.3f µs\n", best_of(proc(data: rawptr) {
             p := cast(^Args)data
             pffft.pffft_transform_ordered(p.setup, raw_data(p.samples), raw_data(p.out), raw_data(p.work), .PFFFT_FORWARD)
@@ -91,6 +104,7 @@ Args :: struct {
     samples:  []f32,
     radix2:   ^fft.FFT_Plan,
     plan:     ^fft.AI_Real_FFT_Plan,
+    extreme:  ^fft.Extreme_FFT_Plan,
     spectrum: []complex64,
     setup:    rawptr,
     out:      []f32,

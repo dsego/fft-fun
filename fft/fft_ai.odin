@@ -123,8 +123,7 @@ ai_run_real_fft :: proc(plan: ^AI_Real_FFT_Plan, samples: []f32, spectrum: []com
 
 // AI: the first stage, stride 1, four values of p at once. The input is the samples, each pair
 // a complex point, and the four outputs of each butterfly land next to each other, so the
-// four butterflies' outputs are transposed on the way out.
-@(private = "file")
+// four butterflies' outputs are transposed on the way out. Public for benchmark_stages.
 ai_first_stage :: proc(stage: AI_Stage, samples: [^]f32, dst: [2][]f32) #no_bounds_check {
     m := stage.n / 4
     tw := raw_data(stage.twiddles)
@@ -147,7 +146,6 @@ ai_first_stage :: proc(stage: AI_Stage, samples: [^]f32, dst: [2][]f32) #no_boun
 }
 
 // AI: a radix-4 stage with a stride of 4 or more, four values of q at once under one twiddle
-@(private = "file")
 ai_radix4_stage :: proc(stage: AI_Stage, src, dst: [2][]f32) #no_bounds_check {
     m := stage.n / 4
     s := stage.stride
@@ -184,7 +182,6 @@ ai_radix4_stage :: proc(stage: AI_Stage, src, dst: [2][]f32) #no_bounds_check {
 
 // AI: the last stage when log2(N/2) is odd, one radix-2 butterfly over the two halves, its
 // twiddle is 1
-@(private = "file")
 ai_radix2_stage :: proc(stage: AI_Stage, src, dst: [2][]f32) #no_bounds_check {
     s := stage.stride
     xr, xi := raw_data(src[0]), raw_data(src[1])
@@ -207,7 +204,6 @@ ai_radix2_stage :: proc(stage: AI_Stage, src, dst: [2][]f32) #no_bounds_check {
     The ½ is in the twiddles. Bin 0 and N/2, both real, are Z[0]'s real part plus and minus its
     imaginary part. Each k reads Z[N/2 - k] too, four bins at once read it backwards.
 */
-@(private = "file")
 ai_split :: proc(plan: ^AI_Real_FFT_Plan, z: [2][]f32, out: [^]f32) #no_bounds_check {
     half := plan.half
     zr, zi := raw_data(z[0]), raw_data(z[1])

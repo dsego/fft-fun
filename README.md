@@ -37,32 +37,42 @@ My radix-2 FFT:     20.548 µs
 ```
 
 
-#### AI FFT
+#### AI FFT and extreme FFT
 
-Added by artificial intelligence (Claude, by Anthropic) in October 2026, in new files only: [fft/fft_ai.odin](fft/fft_ai.odin) and [benchmark_ai/bench.odin](benchmark_ai/bench.odin). The radix-2 FFT with a real input as a half size complex FFT, radix-4 Stockham stages, a twiddle table per stage, split real and imaginary arrays and `#simd[4]f32`. The comments in the file list each change.
+Added by artificial intelligence (Claude, by Anthropic) in October 2026, in new files only.
+
+* [fft/fft_ai.odin](fft/fft_ai.odin), the AI FFT: the radix-2 FFT with a real input as a half size complex FFT, radix-4 Stockham stages, a twiddle table per stage, split real and imaginary arrays and `#simd[4]f32`.
+* [fft/fft_extreme.odin](fft/fft_extreme.odin), the extreme FFT: the AI FFT with the last stage run inside a split that does bin k and N/2 − k together, the stride 4 stage's twiddles four at a time, and smaller changes to the instructions. A little faster than pffft's ordered transform.
+* [benchmark_ai/bench.odin](benchmark_ai/bench.odin): both against pffft and the radix-2 FFT.
+* [benchmark_stages/bench.odin](benchmark_stages/bench.odin): every pass of both on its own. [benchmark_stages/LOG.md](benchmark_stages/LOG.md) has each step from the AI FFT to the extreme FFT and what it measured.
+
+The comments in the files list each change. Both lay out their output like `pffft_transform_ordered`, forward only.
 
 Odin `dev-2026-10:84bc3fc21`, Apple M1 Pro, the fastest of 5 runs of 20,000 iterations. Errors are relative to the largest bin of pffft's result.
 
 ```
 ➜ odin run benchmark_ai -o:speed -microarch:native
 N = 1024
-  error vs pffft:  AI 7.39e-08, radix-2 1.02e-07
-  radix-2:            5.377 µs
-  AI FFT:             0.723 µs
-  pffft ordered:      0.573 µs
-  pffft unordered:    0.502 µs
+  error vs pffft:  AI 7.39e-08, extreme 7.37e-08, radix-2 1.02e-07
+  radix-2:            5.338 µs
+  AI FFT:             0.698 µs
+  extreme FFT:        0.539 µs
+  pffft ordered:      0.555 µs
+  pffft unordered:    0.490 µs
 
 N = 4096
-  error vs pffft:  AI 6.78e-08, radix-2 8.47e-08
-  radix-2:           25.081 µs
-  AI FFT:             3.184 µs
-  pffft ordered:      2.552 µs
-  pffft unordered:    2.331 µs
+  error vs pffft:  AI 6.78e-08, extreme 6.78e-08, radix-2 8.47e-08
+  radix-2:           24.642 µs
+  AI FFT:             3.094 µs
+  extreme FFT:        2.416 µs
+  pffft ordered:      2.528 µs
+  pffft unordered:    2.243 µs
 
 N = 8192
-  error vs pffft:  AI 6.94e-08, radix-2 1.39e-07
-  radix-2:           54.173 µs
-  AI FFT:             6.956 µs
-  pffft ordered:      5.937 µs
-  pffft unordered:    5.418 µs
+  error vs pffft:  AI 6.94e-08, extreme 6.94e-08, radix-2 1.39e-07
+  radix-2:           52.618 µs
+  AI FFT:             6.647 µs
+  extreme FFT:        5.570 µs
+  pffft ordered:      5.790 µs
+  pffft unordered:    5.274 µs
 ```
