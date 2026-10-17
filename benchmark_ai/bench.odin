@@ -4,8 +4,8 @@ package bench_ai
     ADDED BY ARTIFICIAL INTELLIGENCE: written by Claude, an AI model made by Anthropic, on
     2026-10-16. A separate benchmark for fft/fft_ai.odin, benchmark/bench.odin is unchanged.
 
-    Checks the AI FFT against pffft and the radix-2 plan, then times all of them on the same
-    signal, best of 5 runs. Run it from the repository root, next to pffft.dylib:
+    Checks the AI FFT against pffft, Apple's vDSP and the radix-2 plan, then times all of them on
+    the same signal, best of 5 runs. Run it from the repository root, next to pffft.dylib:
 
         odin run benchmark_ai -o:speed -microarch:native
 */
@@ -49,23 +49,6 @@ main :: proc() {
         defer delete(spectrum)
         fft.ai_run_real_fft(&plan, samples, spectrum)
 
-        // Extreme FFT
-        extreme := fft.extreme_create_plan(size)
-        defer fft.extreme_destroy_plan(&extreme)
-        extreme_spectrum := make([]complex64, size / 2)
-        defer delete(extreme_spectrum)
-        fft.extreme_run(&extreme, samples, extreme_spectrum)
-
-        // Extreme FFT into two arrays
-        extreme_re, extreme_im := make_aligned(size / 2), make_aligned(size / 2)
-        defer delete(extreme_re)
-        defer delete(extreme_im)
-        fft.extreme_run_arrays(&extreme, samples, extreme_re, extreme_im)
-        arrays_error: f32
-        for k in 0 ..< size / 2 {
-            arrays_error = max(arrays_error, abs(extreme_re[k] - reference[2 * k]), abs(extreme_im[k] - reference[2 * k + 1]))
-        }
-
         // Radix-2 plan, N complex bins out of the real samples
         radix2 := fft.create_fft_plan(uint(size))
         defer fft.destroy_fft_plan(radix2)
@@ -91,11 +74,9 @@ main :: proc() {
         dft_error := vdsp_error(reference, vdsp_re, vdsp_im)
 
         ai := ([^]f32)(raw_data(spectrum))[:size]
-        extreme_floats := ([^]f32)(raw_data(extreme_spectrum))[:size]
-        peak, ai_error, extreme_error, radix2_error: f32
+        peak, ai_error, radix2_error: f32
         for value in reference do peak = max(peak, abs(value))
         for value, i in reference do ai_error = max(ai_error, abs(ai[i] - value))
-        for value, i in reference do extreme_error = max(extreme_error, abs(extreme_floats[i] - value))
         radix2_error = abs(real(radix2.buffer[0]) - reference[0])
         radix2_error = max(radix2_error, abs(real(radix2.buffer[size / 2]) - reference[1]))
         for k in 1 ..< size / 2 {
@@ -104,8 +85,7 @@ main :: proc() {
         }
 
         fmt.printf("N = %v, largest bin %.1f\n", size, peak)
-        fmt.printf("  error vs pffft:  AI %.2e, extreme %.2e, radix-2 %.2e\n", ai_error / peak, extreme_error / peak, radix2_error / peak)
-        fmt.printf("                   extreme arrays %.2e\n", arrays_error / peak)
+        fmt.printf("  error vs pffft:  AI %.2e, radix-2 %.2e\n", ai_error / peak, radix2_error / peak)
         fmt.printf("                   vDSP FFT %.2e, vDSP DFT %.2e\n", fft_error / peak, dft_error / peak)
 
         fmt.printf("  radix-2:         % 8.3f µs\n", best_of(proc(data: rawptr) {
@@ -116,14 +96,6 @@ main :: proc() {
             p := cast(^Args)data
             fft.ai_run_real_fft(p.plan, p.samples, p.spectrum)
         }, &Args{samples = samples, plan = &plan, spectrum = spectrum}))
-        fmt.printf("  extreme FFT:     % 8.3f µs\n", best_of(proc(data: rawptr) {
-            p := cast(^Args)data
-            fft.extreme_run(p.extreme, p.samples, p.spectrum)
-        }, &Args{samples = samples, extreme = &extreme, spectrum = extreme_spectrum}))
-        fmt.printf("  extreme, arrays: % 8.3f µs\n", best_of(proc(data: rawptr) {
-            p := cast(^Args)data
-            fft.extreme_run_arrays(p.extreme, p.samples, p.vdsp_re, p.vdsp_im)
-        }, &Args{samples = samples, extreme = &extreme, vdsp_re = extreme_re, vdsp_im = extreme_im}))
         fmt.printf("  pffft ordered:   % 8.3f µs\n", best_of(proc(data: rawptr) {
             p := cast(^Args)data
             pffft.pffft_transform_ordered(p.setup, raw_data(p.samples), raw_data(p.out), raw_data(p.work), .PFFFT_FORWARD)
@@ -169,7 +141,6 @@ Args :: struct {
     samples:  []f32,
     radix2:   ^fft.FFT_Plan,
     plan:     ^fft.AI_Real_FFT_Plan,
-    extreme:  ^fft.Extreme_FFT_Plan,
     spectrum: []complex64,
     setup:    rawptr,
     out:      []f32,
