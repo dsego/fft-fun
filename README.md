@@ -25,14 +25,14 @@ Real-to-complex 4096-point FFT on Apple M1 Pro, the fastest of 5 runs of 1,000 i
 
 ```
 ➜ odin run benchmark -o:speed -microarch:native
-Naive DFT real:  33662.202 µs
-KissFFT real:       15.168 µs
-Meow FFT:           10.310 µs
 Pffft:               2.935 µs
-Pocket FFT:          7.915 µs
 FFTW3:               4.550 µs
+Pocket FFT:          7.915 µs
+Meow FFT:           10.310 µs
 MUFFT:              10.630 µs
+KissFFT real:       15.168 µs
 My radix-2 FFT:     23.638 µs
+Naive DFT real:  33662.202 µs
 ```
 
 The KISS FFT library was rebuilt with `-O3` in October 2026; the earlier one had been built without optimization and took 72.794 µs. FFTW was rebuilt with NEON at the same time, it took 7.822 µs without. FFTW and Pocket FFT run in double precision, the others in single.
