@@ -2,8 +2,10 @@ package fftw3
 
 import "core:c"
 
-// ./configure --enable-shared
+// FFTW 3.3.10, NEON in double precision needs the aarch64 build type, it guesses 'arm' on Apple Silicon
+// ./configure --build=aarch64-apple-darwin --enable-shared --disable-static --disable-fortran --enable-neon
 // make
+// install_name_tool -id libfftw3.3.dylib .libs/libfftw3.3.dylib && codesign -f -s - .libs/libfftw3.3.dylib
 foreign import lib "libfftw3.3.dylib"
 
 fftw_complex :: c.complex_double

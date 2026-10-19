@@ -15,9 +15,11 @@ import "../fft"
 
 SIZE :: uint(4096)
 ITERATIONS :: 1000
+// the fastest of RUNS runs is reported, after one more run as a warm-up
+RUNS :: 5
 
 main :: proc() {
-    // Naive DFT
+    // Naive DFT, a single run, it takes too long for more
     if true {
         dft: [SIZE]complex64
         samples: [SIZE]f32
@@ -45,15 +47,18 @@ main :: proc() {
         cfg := kissfft.kiss_fftr_alloc(c.int(SIZE), false, nil, nil)
         // defer kissfft.kiss_fft_free(cfg)
 
-        stopwatch := time.Stopwatch{}
+        best := max(f64)
+        for run in 0..=RUNS {
+            stopwatch := time.Stopwatch{}
 
-        time.stopwatch_start(&stopwatch)
-        for i in 0..<ITERATIONS do kissfft.kiss_fftr(cfg, raw_data(time_data[:]), raw_data(freq_data[:]))
-        time.stopwatch_stop(&stopwatch)
+            time.stopwatch_start(&stopwatch)
+            for i in 0..<ITERATIONS do kissfft.kiss_fftr(cfg, raw_data(time_data[:]), raw_data(freq_data[:]))
+            time.stopwatch_stop(&stopwatch)
 
-        duration := time.stopwatch_duration(stopwatch)
-        µs := time.duration_microseconds(duration)
-        fmt.printf("KissFFT real:   % 10.3f µs\n", µs / f64(ITERATIONS))
+            µs := time.duration_microseconds(time.stopwatch_duration(stopwatch))
+            if run > 0 do best = min(best, µs / f64(ITERATIONS))
+        }
+        fmt.printf("KissFFT real:   % 10.3f µs\n", best)
     }
 
     // Meow FFT
@@ -62,19 +67,23 @@ main :: proc() {
         samples: [SIZE]f32
         for i in 0..<SIZE do samples[i] = f32(1)
 
-        stopwatch := time.Stopwatch{}
         workset_bytes := meow_fft.meow_fft_generate_workset_real(int(SIZE), nil)
         workset, err := mem.alloc(int(workset_bytes))
         defer free(workset)
         meow_fft.meow_fft_generate_workset_real(int(SIZE), workset)
 
-        time.stopwatch_start(&stopwatch)
-        for i in 0..<ITERATIONS do meow_fft.meow_fft_real(workset, raw_data(samples[:]), raw_data(freq_data[:]))
-        time.stopwatch_stop(&stopwatch)
+        best := max(f64)
+        for run in 0..=RUNS {
+            stopwatch := time.Stopwatch{}
 
-        duration := time.stopwatch_duration(stopwatch)
-        µs := time.duration_microseconds(duration)
-        fmt.printf("Meow FFT:       % 10.3f µs\n", µs / f64(ITERATIONS))
+            time.stopwatch_start(&stopwatch)
+            for i in 0..<ITERATIONS do meow_fft.meow_fft_real(workset, raw_data(samples[:]), raw_data(freq_data[:]))
+            time.stopwatch_stop(&stopwatch)
+
+            µs := time.duration_microseconds(time.stopwatch_duration(stopwatch))
+            if run > 0 do best = min(best, µs / f64(ITERATIONS))
+        }
+        fmt.printf("Meow FFT:       % 10.3f µs\n", best)
     }
 
     // Pffft
@@ -83,39 +92,45 @@ main :: proc() {
         samples: [SIZE]f32
         for i in 0..<SIZE do samples[i] = f32(1)
 
-        stopwatch := time.Stopwatch{}
-
         setup := pffft.pffft_new_setup(int(SIZE), pffft.pffft_transform_t.PFFFT_REAL)
         defer pffft.pffft_destroy_setup(setup)
 
-        time.stopwatch_start(&stopwatch)
-        for i in 0..<ITERATIONS {
-            pffft.pffft_transform_ordered(setup, raw_data(samples[:]),raw_data(out[:]), nil, pffft.pffft_direction_t.PFFFT_FORWARD)
-        }
-        time.stopwatch_stop(&stopwatch)
+        best := max(f64)
+        for run in 0..=RUNS {
+            stopwatch := time.Stopwatch{}
 
-        duration := time.stopwatch_duration(stopwatch)
-        µs := time.duration_microseconds(duration)
-        fmt.printf("Pffft:          % 10.3f µs\n", µs / f64(ITERATIONS))
+            time.stopwatch_start(&stopwatch)
+            for i in 0..<ITERATIONS {
+                pffft.pffft_transform_ordered(setup, raw_data(samples[:]),raw_data(out[:]), nil, pffft.pffft_direction_t.PFFFT_FORWARD)
+            }
+            time.stopwatch_stop(&stopwatch)
+
+            µs := time.duration_microseconds(time.stopwatch_duration(stopwatch))
+            if run > 0 do best = min(best, µs / f64(ITERATIONS))
+        }
+        fmt.printf("Pffft:          % 10.3f µs\n", best)
     }
 
     // Pocket FFT
     {
-        stopwatch := time.Stopwatch{}
-
         out : [SIZE*2]f64
         for i in 0..<SIZE do out[i] = f64(1)
 
         plan := pocketfft.make_rfft_plan(SIZE)
         defer pocketfft.destroy_rfft_plan(plan)
 
-        time.stopwatch_start(&stopwatch)
-        for i in 0..<ITERATIONS do pocketfft.rfft_forward(plan, raw_data(out[:]), 1.0)
-        time.stopwatch_stop(&stopwatch)
+        best := max(f64)
+        for run in 0..=RUNS {
+            stopwatch := time.Stopwatch{}
 
-        duration := time.stopwatch_duration(stopwatch)
-        µs := time.duration_microseconds(duration)
-        fmt.printf("Pocket FFT:     % 10.3f µs\n", µs / f64(ITERATIONS))
+            time.stopwatch_start(&stopwatch)
+            for i in 0..<ITERATIONS do pocketfft.rfft_forward(plan, raw_data(out[:]), 1.0)
+            time.stopwatch_stop(&stopwatch)
+
+            µs := time.duration_microseconds(time.stopwatch_duration(stopwatch))
+            if run > 0 do best = min(best, µs / f64(ITERATIONS))
+        }
+        fmt.printf("Pocket FFT:     % 10.3f µs\n", best)
     }
 
     // FFTW3
@@ -128,15 +143,18 @@ main :: proc() {
         plan := fftw3.fftw_plan_dft_r2c_1d(int(SIZE), raw_data(input[:]), raw_data(out[:]), 0)
         defer fftw3.fftw_destroy_plan(plan)
 
-        stopwatch := time.Stopwatch{}
+        best := max(f64)
+        for run in 0..=RUNS {
+            stopwatch := time.Stopwatch{}
 
-        time.stopwatch_start(&stopwatch)
-        for i in 0..<ITERATIONS do fftw3.fftw_execute(plan)
-        time.stopwatch_stop(&stopwatch)
+            time.stopwatch_start(&stopwatch)
+            for i in 0..<ITERATIONS do fftw3.fftw_execute(plan)
+            time.stopwatch_stop(&stopwatch)
 
-        duration := time.stopwatch_duration(stopwatch)
-        µs := time.duration_microseconds(duration)
-        fmt.printf("FFTW3:          % 10.3f µs\n", µs / f64(ITERATIONS))
+            µs := time.duration_microseconds(time.stopwatch_duration(stopwatch))
+            if run > 0 do best = min(best, µs / f64(ITERATIONS))
+        }
+        fmt.printf("FFTW3:          % 10.3f µs\n", best)
     }
 
     // MUFFT
@@ -148,15 +166,18 @@ main :: proc() {
         plan := mufft.mufft_create_plan_1d_r2c(SIZE, 0)
         defer mufft.mufft_free_plan_1d(plan)
 
-        stopwatch := time.Stopwatch{}
+        best := max(f64)
+        for run in 0..=RUNS {
+            stopwatch := time.Stopwatch{}
 
-        time.stopwatch_start(&stopwatch)
-        for i in 0..<ITERATIONS do mufft.mufft_execute_plan_1d(plan, raw_data(dft[:]), raw_data(samples[:]))
-        time.stopwatch_stop(&stopwatch)
+            time.stopwatch_start(&stopwatch)
+            for i in 0..<ITERATIONS do mufft.mufft_execute_plan_1d(plan, raw_data(dft[:]), raw_data(samples[:]))
+            time.stopwatch_stop(&stopwatch)
 
-        duration := time.stopwatch_duration(stopwatch)
-        µs := time.duration_microseconds(duration)
-        fmt.printf("MUFFT:          % 10.3f µs\n", µs / f64(ITERATIONS))
+            µs := time.duration_microseconds(time.stopwatch_duration(stopwatch))
+            if run > 0 do best = min(best, µs / f64(ITERATIONS))
+        }
+        fmt.printf("MUFFT:          % 10.3f µs\n", best)
     }
 
 
@@ -166,16 +187,20 @@ main :: proc() {
         samples: [SIZE]f32
         for i in 0..<SIZE { samples[i] = f32(1) }
 
-        stopwatch := time.Stopwatch{}
         plan := fft.create_fft_plan(SIZE)
         defer fft.destroy_fft_plan(plan)
 
-        time.stopwatch_start(&stopwatch)
-        for i in 0..<ITERATIONS do fft.run_fft_plan(plan, samples[:])
-        time.stopwatch_stop(&stopwatch)
+        best := max(f64)
+        for run in 0..=RUNS {
+            stopwatch := time.Stopwatch{}
 
-        duration := time.stopwatch_duration(stopwatch)
-        µs := time.duration_microseconds(duration)
-        fmt.printf("My radix-2 FFT: % 10.3f µs\n", µs / f64(ITERATIONS))
+            time.stopwatch_start(&stopwatch)
+            for i in 0..<ITERATIONS do fft.run_fft_plan(plan, samples[:])
+            time.stopwatch_stop(&stopwatch)
+
+            µs := time.duration_microseconds(time.stopwatch_duration(stopwatch))
+            if run > 0 do best = min(best, µs / f64(ITERATIONS))
+        }
+        fmt.printf("My radix-2 FFT: % 10.3f µs\n", best)
     }
 }
