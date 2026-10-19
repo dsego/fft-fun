@@ -31,38 +31,35 @@ magnitude :: proc(re: f32, im: f32) -> f32 {
 }
 
 run_fftw3 :: proc () {
-    using fftw3
-
     input: [SIZE]f64
-    out : [SIZE]fftw_complex
+    out : [SIZE]fftw3.fftw_complex
 
     for i in 0..<SIZE {
         input[i] = f64(samples[i])
     }
 
-    plan := fftw_plan_dft_r2c_1d(int(SIZE), raw_data(input[:]), raw_data(out[:]), 0)
-    defer fftw_destroy_plan(plan)
+    plan := fftw3.fftw_plan_dft_r2c_1d(int(SIZE), raw_data(input[:]), raw_data(out[:]), 0)
+    defer fftw3.fftw_destroy_plan(plan)
 
-    fftw_execute(plan)
+    fftw3.fftw_execute(plan)
 
     for i in 0..<SIZE {
         // fmt.println(out[i])
-        spectrum[i] = magnitude(real(out[i]), imag(out[i]))
+        spectrum[i] = magnitude(f32(real(out[i])), f32(imag(out[i])))
     }
 }
 
 run_pocketfft :: proc () {
-    using pocketfft
     out : [SIZE*2]f64
 
     for i in 0..<SIZE {
         out[i] = f64(samples[i])
     }
 
-    plan := make_rfft_plan(SIZE)
-    defer destroy_rfft_plan(plan)
+    plan := pocketfft.make_rfft_plan(SIZE)
+    defer pocketfft.destroy_rfft_plan(plan)
 
-    rfft_forward(plan, raw_data(out[:]), 1.0)
+    pocketfft.rfft_forward(plan, raw_data(out[:]), 1.0)
 
     // TODO: not sure how to read the “halfcomplex”-format output
     spectrum[0] = magnitude(f32(out[0]), 0.0)
@@ -72,13 +69,11 @@ run_pocketfft :: proc () {
 }
 
 run_pffft :: proc() {
-    using pffft
-
     out : [SIZE*2]f32
 
-    setup := pffft_new_setup(SIZE, pffft_transform_t.PFFFT_REAL)
-    defer pffft_destroy_setup(setup)
-    pffft_transform_ordered(setup, raw_data(samples[:]), raw_data(out[:]), nil, pffft_direction_t.PFFFT_FORWARD)
+    setup := pffft.pffft_new_setup(SIZE, pffft.pffft_transform_t.PFFFT_REAL)
+    defer pffft.pffft_destroy_setup(setup)
+    pffft.pffft_transform_ordered(setup, raw_data(samples[:]), raw_data(out[:]), nil, pffft.pffft_direction_t.PFFFT_FORWARD)
 
     i := 0
     j := 0
@@ -90,11 +85,9 @@ run_pffft :: proc() {
 }
 
 run_kiss_fft :: proc() {
-    using kissfft
-
-    freq_data: [SIZE]kiss_fft_cpx
-    cfg := kiss_fftr_alloc(int(SIZE), false, nil, nil)
-    kiss_fftr(cfg, raw_data(samples[:]), raw_data(freq_data[:]))
+    freq_data: [SIZE]kissfft.kiss_fft_cpx
+    cfg := kissfft.kiss_fftr_alloc(c.int(SIZE), false, nil, nil)
+    kissfft.kiss_fftr(cfg, raw_data(samples[:]), raw_data(freq_data[:]))
 
     for i in 0..<SIZE {
         spectrum[i] = magnitude(freq_data[i].r, freq_data[i].i)
@@ -102,14 +95,12 @@ run_kiss_fft :: proc() {
 }
 
 run_meow_fft :: proc() {
-    using meow_fft
-
-    freq_data: [SIZE]Meow_FFT_Complex
-    workset_bytes := meow_fft_generate_workset_real(SIZE, nil)
-    workset := mem.alloc(int(workset_bytes))
+    freq_data: [SIZE]meow_fft.Meow_FFT_Complex
+    workset_bytes := meow_fft.meow_fft_generate_workset_real(SIZE, nil)
+    workset, _ := mem.alloc(int(workset_bytes))
     defer free(workset)
-    meow_fft_generate_workset_real(SIZE, workset)
-    meow_fft_real(workset, raw_data(samples[:]), raw_data(freq_data[:]))
+    meow_fft.meow_fft_generate_workset_real(SIZE, workset)
+    meow_fft.meow_fft_real(workset, raw_data(samples[:]), raw_data(freq_data[:]))
 
     for i in 0..<SIZE {
         spectrum[i] = magnitude(freq_data[i].r, freq_data[i].j)
@@ -117,11 +108,9 @@ run_meow_fft :: proc() {
 }
 
 run_mufft :: proc() {
-    using mufft
-
-    plan := mufft_create_plan_1d_r2c(SIZE, 0)
-    defer mufft_free_plan_1d(plan)
-    mufft_execute_plan_1d(plan, raw_data(dft[:]), raw_data(samples[:]))
+    plan := mufft.mufft_create_plan_1d_r2c(SIZE, 0)
+    defer mufft.mufft_free_plan_1d(plan)
+    mufft.mufft_execute_plan_1d(plan, raw_data(dft[:]), raw_data(samples[:]))
     for i in 0..<SIZE {
         spectrum[i] = magnitude(real(dft[i]), imag(dft[i]))
     }

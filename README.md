@@ -19,22 +19,23 @@ Imported some C libraries to benchmark and compare.
 
 #### Benchmark
 
-Latest benchmark with Odin `dev-2025-08:accdd7c2a` (Aug 2025).
+Latest benchmark with Odin `dev-2026-10:84bc3fc21` (Oct 2026).
 
-Real-to-complex 4096-point FFT, averaged over 1,000 iterations on Apple M1 8 Core.
+Real-to-complex 4096-point FFT, averaged over 1,000 iterations on Apple M1 Pro.
 
 ```
 ➜ odin run benchmark -o:speed -microarch:native
-Naive DFT real:  32623.043 µs
-KissFFT:           115.396 µs
-KissFFT real:       72.794 µs
-Meow FFT:           10.621 µs
-Pffft:               2.637 µs
-Pocket FFT:          7.980 µs
-FFTW3:               7.833 µs
-MUFFT:              10.773 µs
-My radix-2 FFT:     20.548 µs
+Naive DFT real:  32696.807 µs
+KissFFT real:       15.263 µs
+Meow FFT:           10.396 µs
+Pffft:               2.982 µs
+Pocket FFT:          7.995 µs
+FFTW3:               7.931 µs
+MUFFT:              10.651 µs
+My radix-2 FFT:     23.524 µs
 ```
+
+The KISS FFT library was rebuilt with `-O3` in October 2026; the earlier one had been built without optimization and took 72.794 µs.
 
 
 #### AI FFT

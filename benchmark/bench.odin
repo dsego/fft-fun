@@ -1,5 +1,6 @@
 package bench
 
+import "core:c"
 import "core:time"
 import "core:fmt"
 import "core:mem"
@@ -33,28 +34,6 @@ main :: proc() {
         fmt.printf("Naive DFT real: % 10.3f µs\n", µs / f64(ITERATIONS))
     }
 
-    // Kiss FFT
-    {
-        cx_in: [SIZE]kissfft.kiss_fft_cpx
-        cx_out: [SIZE]kissfft.kiss_fft_cpx
-
-        // fill with zeroes
-        for i in 0..<SIZE do cx_in[i] = {1, 0}
-
-        cfg := kissfft.kiss_fft_alloc(int(SIZE), false, nil, nil)
-        // defer kissfft.kiss_fft_free(cfg)
-
-        stopwatch := time.Stopwatch{}
-
-        time.stopwatch_start(&stopwatch)
-        for i in 0..<ITERATIONS do  kissfft.kiss_fft(cfg, raw_data(cx_in[:]), raw_data(cx_out[:]))
-        time.stopwatch_stop(&stopwatch)
-
-        duration := time.stopwatch_duration(stopwatch)
-        µs := time.duration_microseconds(duration)
-        fmt.printf("KissFFT:        % 10.3f µs\n", µs / f64(ITERATIONS))
-    }
-
     // Kiss FFT real
     {
         time_data: [SIZE]f32
@@ -63,7 +42,7 @@ main :: proc() {
         // fill with zeroes
         for i in 0..<SIZE do time_data[i] = f32(1)
 
-        cfg := kissfft.kiss_fftr_alloc(int(SIZE), false, nil, nil)
+        cfg := kissfft.kiss_fftr_alloc(c.int(SIZE), false, nil, nil)
         // defer kissfft.kiss_fft_free(cfg)
 
         stopwatch := time.Stopwatch{}
